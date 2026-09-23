@@ -84,7 +84,7 @@
 
             <!-- Configuración Supabase (si no está definida en config.js) -->
             <div class="mt-6 pt-6 border-t border-slate-800/80">
-                <button type="button" id="toggle-config-btn" class="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center gap-1.5">
+                <button type="button" id="toggle-config-btn" class="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
                     <span>⚙️ Configuración de Conexión Supabase</span>
                     <span id="config-arrow">▼</span>
                 </button>
@@ -371,14 +371,23 @@
     <!-- LÓGICA DE APLICACIÓN EN JAVASCRIPT                                -->
     <!-- ================================================================= -->
     <script>
+        // Constantes por defecto para conexión directa con Supabase (clave pública 'anon')
+        const DEFAULT_SUPABASE_URL = "https://hqpigajjqdolpfbkwlcn.supabase.co";
+        const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxcGlnYWpqcWRvbHBmYmt3bGNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxODc2OTgsImV4cCI6MjEwNTc2MzY5OH0.gK8ffOtc7frvpc76N_EwrbLlX0ctihmPMWde_WD1MZU";
+
         // 1. Estado Global
         let supabaseClient = null;
         let equityChart = null;
 
         // 2. Inicialización de Supabase
         function initSupabase() {
-            const url = window.TRADIA_CONFIG?.supabaseUrl || localStorage.getItem("TRADIA_SUPABASE_URL");
-            const key = window.TRADIA_CONFIG?.supabaseAnonKey || localStorage.getItem("TRADIA_SUPABASE_ANON_KEY");
+            const url = (window.TRADIA_CONFIG?.supabaseUrl && window.TRADIA_CONFIG.supabaseUrl.trim()) ||
+                        (localStorage.getItem("TRADIA_SUPABASE_URL") && localStorage.getItem("TRADIA_SUPABASE_URL").trim()) ||
+                        DEFAULT_SUPABASE_URL;
+
+            const key = (window.TRADIA_CONFIG?.supabaseAnonKey && window.TRADIA_CONFIG.supabaseAnonKey.trim()) ||
+                        (localStorage.getItem("TRADIA_SUPABASE_ANON_KEY") && localStorage.getItem("TRADIA_SUPABASE_ANON_KEY").trim()) ||
+                        DEFAULT_SUPABASE_ANON_KEY;
 
             if (url && key && !url.includes("tu_proyecto")) {
                 try {
@@ -494,8 +503,8 @@
             drawer.classList.toggle("hidden", !isHidden);
             document.getElementById("config-arrow").innerText = isHidden ? "▲" : "▼";
             if (isHidden) {
-                document.getElementById("cfg-url").value = localStorage.getItem("TRADIA_SUPABASE_URL") || window.TRADIA_CONFIG?.supabaseUrl || "";
-                document.getElementById("cfg-anon-key").value = localStorage.getItem("TRADIA_SUPABASE_ANON_KEY") || window.TRADIA_CONFIG?.supabaseAnonKey || "";
+                document.getElementById("cfg-url").value = window.TRADIA_CONFIG?.supabaseUrl || localStorage.getItem("TRADIA_SUPABASE_URL") || DEFAULT_SUPABASE_URL;
+                document.getElementById("cfg-anon-key").value = window.TRADIA_CONFIG?.supabaseAnonKey || localStorage.getItem("TRADIA_SUPABASE_ANON_KEY") || DEFAULT_SUPABASE_ANON_KEY;
             }
         });
 
