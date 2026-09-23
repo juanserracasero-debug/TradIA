@@ -13,6 +13,7 @@ import yaml
 @dataclass
 class NotificationsConfig:
     channel: str = "email"  # "email" o "whatsapp"
+    heartbeat_emails: bool = True  # Confirmación corta en cada ciclo de 15m (las 24h)
 
 
 @dataclass
@@ -35,6 +36,7 @@ class ScheduleConfig:
     evening_window: WindowConfig = field(default_factory=lambda: WindowConfig("20:30", "23:00"))
     force_close_time: str = "22:45"
     daily_report_time: str = "23:00"
+    extended_hours_until: Optional[str] = None
 
 
 @dataclass
@@ -144,8 +146,15 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         data = yaml.safe_load(f) or {}
 
     notif_raw = data.get("notifications", {})
+    env_heartbeat = os.getenv("HEARTBEAT_EMAILS")
+    if env_heartbeat is not None and env_heartbeat.strip() != "":
+        heartbeat_enabled = env_heartbeat.strip().lower() in ("true", "1", "yes", "on")
+    else:
+        heartbeat_enabled = bool(notif_raw.get("heartbeat_emails", True))
+
     notif_cfg = NotificationsConfig(
         channel=str(notif_raw.get("channel", "email")).lower(),
+        heartbeat_emails=heartbeat_enabled,
     )
 
     market_raw = data.get("market", {})
@@ -171,6 +180,7 @@ def load_config(config_path: Optional[str] = None) -> AppConfig:
         ),
         force_close_time=sched_raw.get("force_close_time", "22:45"),
         daily_report_time=sched_raw.get("daily_report_time", "23:00"),
+        extended_hours_until=os.getenv("EXTENDED_HOURS_UNTIL") or sched_raw.get("extended_hours_until"),
     )
 
     ind_raw = data.get("indicators", {})

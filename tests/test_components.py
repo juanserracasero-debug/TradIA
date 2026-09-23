@@ -20,6 +20,7 @@ from src.indicators.technical import (
 )
 from src.notifications.base import Notifier
 from src.scheduler.service import LiveTradingService
+from src.scheduler.time_manager import MadridTimeManager
 from src.strategy.rules import RuleEngine, SignalAction, SignalEvent
 from src.backtest.engine import BacktestEngine
 
@@ -149,6 +150,7 @@ class TestLiveTradingServiceIntegration(unittest.TestCase):
         self.db_path = os.path.join(self.temp_dir, "test_live_int.db")
         self.db = DatabaseManager(db_path=self.db_path)
         self.config = load_config()
+        self.config.schedule.extended_hours_until = None
         self.notifier = MagicMock(spec=Notifier)
         self.service = LiveTradingService(
             config=self.config,
@@ -250,6 +252,91 @@ class TestLiveTradingServiceIntegration(unittest.TestCase):
         report_time = datetime(2026, 9, 23, 23, 0, 0, tzinfo=madrid_tz)
         self.service.run_analysis_cycle(test_datetime=report_time)
         self.assertTrue(self.notifier.send_daily_report.called)
+
+    def test_extended_hours_disables_forced_close_and_enables_night_trading(self):
+        """Con extended_hours_until activo, a las 22:45 no se liquidan posiciones y se analiza de noche."""
+        self.service.config.schedule.extended_hours_until = "2026-09-24T08:30:00+02:00"
+        self.service.time_manager = MadridTimeManager(self.service.config.schedule)
+        madrid_tz = ZoneInfo("Europe/Madrid")
+        close_time = datetime(2026, 9, 23, 22, 45, 0, tzinfo=madrid_tz)
+
+        # Abrir posición de prueba en wallet
+        self.service.wallet.open_simulated_buy("BTC/USDT", 86000.0, close_time, ["Test Buy"])
+        self.assertEqual(len(self.db.get_open_positions()), 1)
+
+        # Ejecutar ciclo a las 22:45
+        with patch.object(self.service.fetcher, "fetch_ohlcv", side_effect=lambda symbol, **kwargs: create_mock_ohlcv(60)):
+            with patch.object(self.service.rule_engine, "evaluate_candle", return_value=None):
+                self.service.run_analysis_cycle(test_datetime=close_time)
+
+        # La posición NO debe haberse cerrado porque el cierre forzado queda desactivado
+        self.assertEqual(len(self.db.get_open_positions()), 1)
+
+        # Durante la madrugada (03:00), el bot analiza en vez de ponerse en reposo
+        night_time = datetime(2026, 9, 24, 3, 0, 0, tzinfo=madrid_tz)
+        self.assertTrue(self.service.time_manager.is_trading_hour(night_time))
+
+
+class TestBotControlRunnerLogic(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_ctrl_runner.db")
+        self.db = DatabaseManager(db_path=self.db_path)
+        self.config = load_config()
+        self.config.schedule.extended_hours_until = None
+        self.notifier = MagicMock(spec=Notifier)
+        self.service = LiveTradingService(
+            config=self.config,
+            db_manager=self.db,
+            notifier=self.notifier,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_paused_indefinite_stops_cycle(self):
+        from scripts.run_live import check_and_apply_bot_control
+        self.db.update_bot_control(status="paused_indefinite")
+        should_run, reason = check_and_apply_bot_control(self.db, self.service)
+        self.assertFalse(should_run)
+        self.assertIn("indefinidamente", reason)
+
+    def test_paused_until_future_stops_cycle(self):
+        from scripts.run_live import check_and_apply_bot_control
+        future_str = "2029-01-01T12:00:00+02:00"
+        self.db.update_bot_control(status="paused_until", resume_at=future_str)
+        should_run, reason = check_and_apply_bot_control(self.db, self.service)
+        self.assertFalse(should_run)
+        self.assertIn("temporalmente hasta", reason)
+
+    def test_paused_until_past_auto_resumes(self):
+        from scripts.run_live import check_and_apply_bot_control
+        past_str = "2020-01-01T12:00:00+02:00"
+        self.db.update_bot_control(status="paused_until", resume_at=past_str)
+        should_run, reason = check_and_apply_bot_control(self.db, self.service)
+        self.assertTrue(should_run)
+        self.assertEqual(reason, "active")
+        # Verificar que en la base de datos se actualizó a active
+        ctrl = self.db.get_bot_control()
+        self.assertEqual(ctrl["status"], "active")
+        self.assertIsNone(ctrl["resume_at"])
+
+    def test_active_applies_dynamic_trading_windows(self):
+        from scripts.run_live import check_and_apply_bot_control
+        self.db.update_bot_control(
+            status="active",
+            trading_window_1_start="09:15",
+            trading_window_1_end="16:45",
+            trading_window_2_start="21:15",
+            trading_window_2_end="22:30",
+        )
+        should_run, reason = check_and_apply_bot_control(self.db, self.service)
+        self.assertTrue(should_run)
+        self.assertEqual(self.service.time_manager.morning_start.strftime("%H:%M"), "09:15")
+        self.assertEqual(self.service.time_manager.morning_end.strftime("%H:%M"), "16:45")
+        self.assertEqual(self.service.time_manager.evening_start.strftime("%H:%M"), "21:15")
+        self.assertEqual(self.service.time_manager.evening_end.strftime("%H:%M"), "22:30")
 
 
 if __name__ == "__main__":

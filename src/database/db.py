@@ -1,4 +1,14 @@
-"""Gestor de base de datos SQLite para TradIA.
+"""Gestor de persistencia híbrido para TradIA (Supabase en la nube / SQLite local).
+
+IMPORTANTE — ARQUITECTURA LOCAL VS PRODUCCIÓN:
+- En entorno LOCAL: NO definas SUPABASE_URL ni SUPABASE_KEY en el archivo .env.
+  Al omitir estas variables, DatabaseManager selecciona de manera automática
+  el backend SQLite local ('data/tradia.db'). Esto permite ejecutar pruebas,
+  backtests y suites de tests de forma totalmente aislada sin riesgo de alterar
+  o machacar los datos reales/productivos almacenados en la nube.
+- En PRODUCCIÓN (GitHub Actions): Las variables SUPABASE_URL y SUPABASE_KEY
+  se inyectan a través de los GitHub Repository Secrets, activando de forma
+  transparente el backend SupabaseManager (PostgreSQL en Supabase).
 
 Almacena:
 - Señales generadas
@@ -6,6 +16,7 @@ Almacena:
 - Posiciones abiertas simuladas
 - Registro histórico de operaciones cerradas con P&L
 - Instantáneas diarias de rendimiento
+- Posiciones confirmadas por el usuario
 """
 import json
 import logging
@@ -167,6 +178,26 @@ class DatabaseManager:
                     close_price REAL,
                     closed_at TEXT
                 )
+            """)
+
+            # 7. Control de Estado Operativo y Franjas de Trading Remotas (Dashboard)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS bot_control (
+                    id INTEGER PRIMARY KEY,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    resume_at TEXT,
+                    trading_window_1_start TEXT NOT NULL DEFAULT '08:30',
+                    trading_window_1_end TEXT NOT NULL DEFAULT '17:30',
+                    trading_window_2_start TEXT NOT NULL DEFAULT '20:30',
+                    trading_window_2_end TEXT NOT NULL DEFAULT '23:00',
+                    updated_at TEXT NOT NULL
+                )
+            """)
+
+            cursor.execute("""
+                INSERT OR IGNORE INTO bot_control
+                (id, status, resume_at, trading_window_1_start, trading_window_1_end, trading_window_2_start, trading_window_2_end, updated_at)
+                VALUES (1, 'active', NULL, '08:30', '17:30', '20:30', '23:00', datetime('now'))
             """)
 
             # Migración automática si la tabla sim_wallet ya existía con esquema antiguo
@@ -566,3 +597,80 @@ class DatabaseManager:
             )
             conn.commit()
             return cursor.rowcount
+
+    # --- Métodos de Control del Bot ---
+    def get_bot_control(self) -> Dict[str, Any]:
+        """Recupera el estado de control operativo del bot (Supabase o SQLite)."""
+        if self._backend:
+            return self._backend.get_bot_control()
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM bot_control WHERE id = 1")
+            row = cursor.fetchone()
+            if row is None:
+                now_str = datetime.now(timezone.utc).isoformat()
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO bot_control
+                    (id, status, resume_at, trading_window_1_start, trading_window_1_end, trading_window_2_start, trading_window_2_end, updated_at)
+                    VALUES (1, 'active', NULL, '08:30', '17:30', '20:30', '23:00', ?)
+                    """,
+                    (now_str,),
+                )
+                conn.commit()
+                return {
+                    "id": 1,
+                    "status": "active",
+                    "resume_at": None,
+                    "trading_window_1_start": "08:30",
+                    "trading_window_1_end": "17:30",
+                    "trading_window_2_start": "20:30",
+                    "trading_window_2_end": "23:00",
+                    "updated_at": now_str,
+                }
+            return dict(row)
+
+    def update_bot_control(
+        self,
+        status: Optional[str] = None,
+        resume_at: Optional[str] = None,
+        trading_window_1_start: Optional[str] = None,
+        trading_window_1_end: Optional[str] = None,
+        trading_window_2_start: Optional[str] = None,
+        trading_window_2_end: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Actualiza el estado de control del bot y/o sus franjas horarias."""
+        if self._backend:
+            return self._backend.update_bot_control(
+                status=status,
+                resume_at=resume_at,
+                trading_window_1_start=trading_window_1_start,
+                trading_window_1_end=trading_window_1_end,
+                trading_window_2_start=trading_window_2_start,
+                trading_window_2_end=trading_window_2_end,
+            )
+
+        current = self.get_bot_control()
+        new_status = status if status is not None else current["status"]
+        new_resume_at = resume_at if status != "active" else None
+        new_w1_start = trading_window_1_start or current["trading_window_1_start"]
+        new_w1_end = trading_window_1_end or current["trading_window_1_end"]
+        new_w2_start = trading_window_2_start or current["trading_window_2_start"]
+        new_w2_end = trading_window_2_end or current["trading_window_2_end"]
+        now_str = datetime.now(timezone.utc).isoformat()
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE bot_control
+                SET status = ?, resume_at = ?, trading_window_1_start = ?, trading_window_1_end = ?,
+                    trading_window_2_start = ?, trading_window_2_end = ?, updated_at = ?
+                WHERE id = 1
+                """,
+                (new_status, new_resume_at, new_w1_start, new_w1_end, new_w2_start, new_w2_end, now_str),
+            )
+            conn.commit()
+
+        return self.get_bot_control()

@@ -317,3 +317,52 @@ class SupabaseManager:
             update_data["close_price"] = close_price
         res = self.client.table("user_confirmed_positions").update(update_data).eq("symbol", symbol).eq("is_open", 1).execute()
         return len(res.data or [])
+
+    # --- Métodos de Control del Bot ---
+    def get_bot_control(self) -> Dict[str, Any]:
+        """Obtiene el estado de control operativo del bot desde Supabase."""
+        res = self.client.table("bot_control").select("*").eq("id", 1).execute()
+        if not res.data:
+            default_row = {
+                "id": 1,
+                "status": "active",
+                "resume_at": None,
+                "trading_window_1_start": "08:30",
+                "trading_window_1_end": "17:30",
+                "trading_window_2_start": "20:30",
+                "trading_window_2_end": "23:00",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            upsert_res = self.client.table("bot_control").upsert(default_row).execute()
+            return upsert_res.data[0] if upsert_res.data else default_row
+        return res.data[0]
+
+    def update_bot_control(
+        self,
+        status: Optional[str] = None,
+        resume_at: Optional[str] = None,
+        trading_window_1_start: Optional[str] = None,
+        trading_window_1_end: Optional[str] = None,
+        trading_window_2_start: Optional[str] = None,
+        trading_window_2_end: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Actualiza el estado de control o franjas horarias del bot en Supabase."""
+        now_str = datetime.now(timezone.utc).isoformat()
+        update_data: Dict[str, Any] = {"updated_at": now_str}
+        if status is not None:
+            update_data["status"] = status
+        if resume_at is not None or status == "active":
+            update_data["resume_at"] = resume_at if status != "active" else None
+        if trading_window_1_start is not None:
+            update_data["trading_window_1_start"] = trading_window_1_start
+        if trading_window_1_end is not None:
+            update_data["trading_window_1_end"] = trading_window_1_end
+        if trading_window_2_start is not None:
+            update_data["trading_window_2_start"] = trading_window_2_start
+        if trading_window_2_end is not None:
+            update_data["trading_window_2_end"] = trading_window_2_end
+
+        res = self.client.table("bot_control").update(update_data).eq("id", 1).execute()
+        if res.data:
+            return res.data[0]
+        return self.get_bot_control()

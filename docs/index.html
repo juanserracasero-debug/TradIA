@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradIA — Dashboard de Control & Rendimiento</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#ecfdf5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Supabase JS v2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Configuración local -->
+    <script src="config.js"></script>
+    <style>
+        /* Estilos personalizados para scroll y animaciones */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white">
+
+    <!-- ================================================================= -->
+    <!-- VISTA 1: PANTALLA DE LOGIN CON SUPABASE AUTH                      -->
+    <!-- ================================================================= -->
+    <div id="auth-view" class="flex min-h-screen items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-8 shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-500/20 mb-4">
+                    <span class="text-2xl font-black text-slate-950">⚡</span>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight text-white">TradIA Dashboard</h1>
+                <p class="text-sm text-slate-400 mt-1">Control Remoto y Métricas de Rendimiento</p>
+                <div class="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1 text-xs text-slate-300 border border-slate-700">
+                    <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Supabase Auth + RLS Protection
+                </div>
+            </div>
+
+            <!-- Formulario de Login -->
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Correo Electrónico</label>
+                    <input type="email" id="auth-email" required placeholder="tu_correo@gmail.com"
+                        class="w-full rounded-xl bg-slate-900/90 border border-slate-700 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Contraseña</label>
+                    <input type="password" id="auth-password" required placeholder="••••••••••••"
+                        class="w-full rounded-xl bg-slate-900/90 border border-slate-700 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all">
+                </div>
+
+                <div id="auth-error" class="hidden rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 text-xs text-rose-400"></div>
+
+                <button type="submit" id="btn-login"
+                    class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.99] transition-all">
+                    Iniciar Sesión
+                </button>
+            </form>
+
+            <!-- Configuración Supabase (si no está definida en config.js) -->
+            <div class="mt-6 pt-6 border-t border-slate-800/80">
+                <button type="button" id="toggle-config-btn" class="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center gap-1.5">
+                    <span>⚙️ Configuración de Conexión Supabase</span>
+                    <span id="config-arrow">▼</span>
+                </button>
+                <div id="config-drawer" class="hidden mt-4 space-y-3 p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-xs">
+                    <div>
+                        <label class="text-slate-400 block mb-1">SUPABASE_URL</label>
+                        <input type="text" id="cfg-url" placeholder="https://xyz.supabase.co"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                    </div>
+                    <div>
+                        <label class="text-slate-400 block mb-1">SUPABASE_ANON_KEY (Pública)</label>
+                        <input type="password" id="cfg-anon-key" placeholder="eyJhbGciOi..."
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white">
+                    </div>
+                    <button type="button" id="btn-save-cfg" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-1.5 rounded-lg text-xs font-medium">
+                        Guardar Conexión Local
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- VISTA 2: DASHBOARD PRINCIPAL (PROTEGIDO TRAS LOGIN)               -->
+    <!-- ================================================================= -->
+    <div id="app-view" class="hidden min-h-screen flex flex-col">
+        <!-- Barra de Navegación Superior -->
+        <header class="glass-panel sticky top-0 z-30 border-b border-slate-800 px-4 lg:px-8 py-3.5">
+            <div class="max-w-7xl mx-auto flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 shadow-md shadow-emerald-500/20">
+                        <span class="text-lg font-black text-slate-950">⚡</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-base tracking-tight text-white">TradIA Dashboard</span>
+                            <span id="badge-network" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Paper Trading</span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 flex items-center gap-2">
+                            <span>Madrid: <b id="clock-madrid" class="text-slate-200 font-mono">--:--:--</b></span>
+                            <span>•</span>
+                            <span id="user-display" class="truncate max-w-[180px] text-slate-300">usuario</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2.5">
+                    <button id="btn-refresh" title="Refrescar datos" class="p-2 text-slate-400 hover:text-white rounded-lg bg-slate-800/60 border border-slate-700 hover:bg-slate-800 transition-all">
+                        <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                    <button id="btn-logout" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 border border-slate-700 hover:border-rose-500/30 transition-all">
+                        Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto w-full p-4 lg:p-8 space-y-6 flex-1">
+
+            <!-- 1. SECCIÓN DE CONTROL DEL BOT (bot_control) -->
+            <section class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800">
+                    <div>
+                        <div class="text-xs uppercase font-semibold tracking-wider text-slate-400">Estado de Operativa Remota</div>
+                        <div class="flex items-center gap-3 mt-1.5">
+                            <div id="status-pill" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-800 border border-slate-700 text-slate-300">
+                                <span class="h-2.5 w-2.5 rounded-full bg-slate-500"></span>
+                                <span>Cargando estado...</span>
+                            </div>
+                            <span id="status-extra" class="text-xs text-slate-400"></span>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Acción de Control -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="btn-resume-bot" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20 transition-all">
+                            ▶️ Encender / Reanudar
+                        </button>
+                        <button id="btn-open-pause-modal" class="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all">
+                            ⏸️ Pausa Temporal...
+                        </button>
+                        <button id="btn-pause-indefinite" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition-all">
+                            ⏹️ Pausa Indefinida
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Configuración de Franjas Horarias de Trading -->
+                <div class="mt-5 pt-1">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">Franjas de Trading de Madrid</span>
+                        <span class="text-[11px] text-slate-400">El bot solo analiza mercado durante estas franjas (o si el horario extendido temporal está vigente)</span>
+                    </div>
+                    <form id="form-windows" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 items-end">
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Mañana (Inicio)</label>
+                            <input type="time" id="win-1-start" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Mañana (Fin)</label>
+                            <input type="time" id="win-1-end" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Tarde/Noche (Inicio)</label>
+                            <input type="time" id="win-2-start" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Tarde/Noche (Fin)</label>
+                            <input type="time" id="win-2-end" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white">
+                        </div>
+                        <div class="col-span-2 sm:col-span-4 lg:col-span-1">
+                            <button type="submit" id="btn-save-windows" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg px-3 py-2 text-xs font-semibold transition-all">
+                                Guardar Franjas
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 2. RESUMEN DE PROFIT (KPI CARDS) -->
+            <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- 1 Hora -->
+                <div class="glass-panel rounded-2xl p-5 border border-slate-800 relative overflow-hidden">
+                    <div class="text-xs uppercase font-semibold text-slate-400">Profit Última 1h</div>
+                    <div id="kpi-1h-pnl" class="text-2xl font-extrabold mt-2 text-slate-200">0.00€</div>
+                    <div id="kpi-1h-sub" class="text-xs text-slate-400 mt-1">0 operaciones</div>
+                </div>
+
+                <!-- 24 Horas -->
+                <div class="glass-panel rounded-2xl p-5 border border-slate-800 relative overflow-hidden">
+                    <div class="text-xs uppercase font-semibold text-slate-400">Profit Últimas 24h</div>
+                    <div id="kpi-24h-pnl" class="text-2xl font-extrabold mt-2 text-slate-200">0.00€</div>
+                    <div id="kpi-24h-sub" class="text-xs text-slate-400 mt-1">0 operaciones</div>
+                </div>
+
+                <!-- 7 Días (Semana) -->
+                <div class="glass-panel rounded-2xl p-5 border border-slate-800 relative overflow-hidden">
+                    <div class="text-xs uppercase font-semibold text-slate-400">Profit Última Semana</div>
+                    <div id="kpi-7d-pnl" class="text-2xl font-extrabold mt-2 text-slate-200">0.00€</div>
+                    <div id="kpi-7d-sub" class="text-xs text-slate-400 mt-1">Win rate: 0.0%</div>
+                </div>
+
+                <!-- Balance Total Cartera -->
+                <div class="glass-panel rounded-2xl p-5 border border-slate-800 relative overflow-hidden">
+                    <div class="text-xs uppercase font-semibold text-slate-400">Balance Simulado</div>
+                    <div id="kpi-balance" class="text-2xl font-extrabold mt-2 text-emerald-400">10.00€</div>
+                    <div id="kpi-floor-badge" class="mt-1 inline-flex items-center gap-1 text-[11px] text-slate-400">
+                        🛡️ Colchón: Inactivo (&lt;12€)
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. GRÁFICA DE PROFIT / PÉRDIDA EN EL TIEMPO -->
+            <section class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h2 class="text-base font-bold text-white tracking-tight">Evolución de Rendimiento Acumulado</h2>
+                        <p class="text-xs text-slate-400">Curva de capital (Equity) y P&L neto histórico</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                        <span class="text-xs text-slate-300">Balance en tiempo real</span>
+                    </div>
+                </div>
+                <div class="h-72 w-full">
+                    <canvas id="chart-equity"></canvas>
+                </div>
+            </section>
+
+            <!-- 4. HISTORIAL COMPLETO DE OPERACIONES (sim_trades) -->
+            <section class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h2 class="text-base font-bold text-white tracking-tight">Historial de Operaciones</h2>
+                        <p class="text-xs text-slate-400">Registro auditable de compras y ventas cerradas con comisiones y slippage</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <select id="filter-symbol" class="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-300">
+                            <option value="ALL">Todos los pares</option>
+                            <option value="BTC/USDT">BTC/USDT</option>
+                            <option value="ETH/USDT">ETH/USDT</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-300 border-collapse">
+                        <thead class="border-b border-slate-800 bg-slate-900/50 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                            <tr>
+                                <th class="p-3">Par</th>
+                                <th class="p-3">Compra</th>
+                                <th class="p-3">Precio Entrada</th>
+                                <th class="p-3">Venta</th>
+                                <th class="p-3">Precio Salida</th>
+                                <th class="p-3">Invertido</th>
+                                <th class="p-3">Recibido</th>
+                                <th class="p-3 text-right">P&L Neto</th>
+                                <th class="p-3">Motivos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-table-body" class="divide-y divide-slate-800/60 font-mono text-xs">
+                            <tr>
+                                <td colspan="9" class="p-6 text-center text-slate-500 font-sans">No hay operaciones cerradas registradas todavía.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 5. INFORMES DIARIOS (sim_daily_snapshots) -->
+            <section class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl space-y-4">
+                <div>
+                    <h2 class="text-base font-bold text-white tracking-tight">Informes Diarios de Cierre</h2>
+                    <p class="text-xs text-slate-400">Instantáneas generadas cada noche a las 23:00 Madrid</p>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-300 border-collapse">
+                        <thead class="border-b border-slate-800 bg-slate-900/50 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                            <tr>
+                                <th class="p-3">Fecha</th>
+                                <th class="p-3">Balance Cierre</th>
+                                <th class="p-3">P&L Neto (€)</th>
+                                <th class="p-3">P&L Neto (%)</th>
+                                <th class="p-3">Operaciones</th>
+                                <th class="p-3">Tasa de Acierto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="snapshots-table-body" class="divide-y divide-slate-800/60 font-mono text-xs">
+                            <tr>
+                                <td colspan="6" class="p-6 text-center text-slate-500 font-sans">No hay reportes diarios registrados.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL: PAUSA TEMPORAL                                             -->
+    <!-- ================================================================= -->
+    <div id="pause-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div class="glass-panel w-full max-w-sm rounded-2xl p-6 border border-slate-700 shadow-2xl">
+            <h3 class="text-base font-bold text-white mb-2">Pausar Bot Temporalmente</h3>
+            <p class="text-xs text-slate-400 mb-4">Elige cuánto tiempo pausar el análisis de mercado. Al finalizar, se reanudará automáticamente.</p>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Duración predefinida</label>
+                    <select id="pause-preset" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+                        <option value="1">1 hora</option>
+                        <option value="2">2 horas</option>
+                        <option value="4" selected>4 horas</option>
+                        <option value="8">8 horas</option>
+                        <option value="12">12 horas</option>
+                        <option value="24">24 horas (1 día)</option>
+                        <option value="48">48 horas (2 días)</option>
+                        <option value="168">7 días (1 semana)</option>
+                        <option value="custom">Fecha y hora personalizada...</option>
+                    </select>
+                </div>
+
+                <div id="custom-date-container" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Reanudar en (Hora de Madrid)</label>
+                    <input type="datetime-local" id="pause-custom-datetime" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-6">
+                <button type="button" id="btn-cancel-pause" class="w-1/2 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300">
+                    Cancelar
+                </button>
+                <button type="button" id="btn-confirm-pause" class="w-1/2 py-2 text-xs font-semibold rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold">
+                    Confirmar Pausa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- LÓGICA DE APLICACIÓN EN JAVASCRIPT                                -->
+    <!-- ================================================================= -->
+    <script>
+        // 1. Estado Global
+        let supabaseClient = null;
+        let equityChart = null;
+
+        // 2. Inicialización de Supabase
+        function initSupabase() {
+            const url = window.TRADIA_CONFIG?.supabaseUrl || localStorage.getItem("TRADIA_SUPABASE_URL");
+            const key = window.TRADIA_CONFIG?.supabaseAnonKey || localStorage.getItem("TRADIA_SUPABASE_ANON_KEY");
+
+            if (url && key && !url.includes("tu_proyecto")) {
+                try {
+                    supabaseClient = supabase.createClient(url, key);
+                    return true;
+                } catch (e) {
+                    console.error("Error creando cliente Supabase:", e);
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        // 3. Reloj en vivo de Madrid
+        function startMadridClock() {
+            setInterval(() => {
+                const now = new Date();
+                const formatter = new Intl.DateTimeFormat('es-ES', {
+                    timeZone: 'Europe/Madrid',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+                const el = document.getElementById("clock-madrid");
+                if (el) el.innerText = formatter.format(now);
+            }, 1000);
+        }
+
+        // 4. Verificación de Autenticación
+        async function checkSession() {
+            if (!supabaseClient) {
+                showAuthView();
+                return;
+            }
+
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+            if (session && session.user) {
+                showAppView(session.user);
+                loadAllData();
+            } else {
+                showAuthView();
+            }
+        }
+
+        function showAuthView() {
+            document.getElementById("auth-view").classList.remove("hidden");
+            document.getElementById("app-view").classList.add("hidden");
+        }
+
+        function showAppView(user) {
+            document.getElementById("auth-view").classList.add("hidden");
+            document.getElementById("app-view").classList.remove("hidden");
+            document.getElementById("user-display").innerText = user.email || "Usuario";
+        }
+
+        // 5. Manejo del Login Form
+        document.getElementById("login-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const email = document.getElementById("auth-email").value.trim();
+            const password = document.getElementById("auth-password").value;
+            const errDiv = document.getElementById("auth-error");
+            const btn = document.getElementById("btn-login");
+
+            errDiv.classList.add("hidden");
+            btn.disabled = true;
+            btn.innerText = "Verificando...";
+
+            if (!supabaseClient) {
+                if (!initSupabase()) {
+                    errDiv.innerText = "Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY. Haz clic en 'Configuración de Conexión'.";
+                    errDiv.classList.remove("hidden");
+                    btn.disabled = false;
+                    btn.innerText = "Iniciar Sesión";
+                    return;
+                }
+            }
+
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) {
+                    errDiv.innerText = "Error: " + (error.message || "Credenciales incorrectas.");
+                    errDiv.classList.remove("hidden");
+                } else if (data && data.user) {
+                    showAppView(data.user);
+                    loadAllData();
+                }
+            } catch (err) {
+                errDiv.innerText = "Fallo de conexión con Supabase Auth: " + err.message;
+                errDiv.classList.remove("hidden");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Iniciar Sesión";
+            }
+        });
+
+        // 6. Cerrar Sesión
+        document.getElementById("btn-logout").addEventListener("click", async () => {
+            if (supabaseClient) {
+                await supabaseClient.auth.signOut();
+            }
+            showAuthView();
+        });
+
+        // 7. Toggle Drawer Configuración Supabase
+        document.getElementById("toggle-config-btn").addEventListener("click", () => {
+            const drawer = document.getElementById("config-drawer");
+            const isHidden = drawer.classList.contains("hidden");
+            drawer.classList.toggle("hidden", !isHidden);
+            document.getElementById("config-arrow").innerText = isHidden ? "▲" : "▼";
+            if (isHidden) {
+                document.getElementById("cfg-url").value = localStorage.getItem("TRADIA_SUPABASE_URL") || window.TRADIA_CONFIG?.supabaseUrl || "";
+                document.getElementById("cfg-anon-key").value = localStorage.getItem("TRADIA_SUPABASE_ANON_KEY") || window.TRADIA_CONFIG?.supabaseAnonKey || "";
+            }
+        });
+
+        document.getElementById("btn-save-cfg").addEventListener("click", () => {
+            const u = document.getElementById("cfg-url").value.trim();
+            const k = document.getElementById("cfg-anon-key").value.trim();
+            if (u) localStorage.setItem("TRADIA_SUPABASE_URL", u);
+            if (k) localStorage.setItem("TRADIA_SUPABASE_ANON_KEY", k);
+            if (window.TRADIA_CONFIG) {
+                window.TRADIA_CONFIG.supabaseUrl = u;
+                window.TRADIA_CONFIG.supabaseAnonKey = k;
+            }
+            initSupabase();
+            alert("Conexión guardada. Ahora puedes iniciar sesión con Supabase Auth.");
+            document.getElementById("config-drawer").classList.add("hidden");
+        });
+
+        // =================================================================
+        // CARGA DE DATOS & PANEL DE CONTROL
+        // =================================================================
+        async function loadAllData() {
+            if (!supabaseClient) return;
+
+            const icon = document.getElementById("refresh-icon");
+            if (icon) icon.classList.add("animate-spin");
+
+            try {
+                await Promise.all([
+                    loadBotControl(),
+                    loadWalletStatus(),
+                    loadTradesAndKPIs(),
+                    loadDailySnapshots()
+                ]);
+            } catch (err) {
+                console.error("Error cargando datos:", err);
+            } finally {
+                if (icon) icon.classList.remove("animate-spin");
+            }
+        }
+
+        // Cargar bot_control
+        async function loadBotControl() {
+            const { data, error } = await supabaseClient.from("bot_control").select("*").eq("id", 1).single();
+            if (error || !data) return;
+
+            const pill = document.getElementById("status-pill");
+            const extra = document.getElementById("status-extra");
+
+            if (data.status === "active") {
+                pill.className = "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+                pill.innerHTML = `<span class="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse"></span><span>ACTIVO — EN LÍNEA</span>`;
+                extra.innerText = `Operando en franjas ${data.trading_window_1_start}–${data.trading_window_1_end} y ${data.trading_window_2_start}–${data.trading_window_2_end}`;
+            } else if (data.status === "paused_until") {
+                pill.className = "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40";
+                pill.innerHTML = `<span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span><span>PAUSA TEMPORAL</span>`;
+                const resumeDate = data.resume_at ? new Date(data.resume_at).toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : "próximo ciclo";
+                extra.innerText = `Reanuda automáticamente el ${resumeDate} (Madrid)`;
+            } else if (data.status === "paused_indefinite") {
+                pill.className = "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40";
+                pill.innerHTML = `<span class="h-2.5 w-2.5 rounded-full bg-rose-400"></span><span>PAUSADO INDEFINIDAMENTE</span>`;
+                extra.innerText = "No se ejecutarán análisis de mercado hasta reactivar";
+            }
+
+            // Franjas horarias en inputs
+            document.getElementById("win-1-start").value = data.trading_window_1_start || "08:30";
+            document.getElementById("win-1-end").value = data.trading_window_1_end || "17:30";
+            document.getElementById("win-2-start").value = data.trading_window_2_start || "20:30";
+            document.getElementById("win-2-end").value = data.trading_window_2_end || "23:00";
+        }
+
+        // Acciones de Bot Control
+        document.getElementById("btn-resume-bot").addEventListener("click", async () => {
+            const { error } = await supabaseClient.from("bot_control").update({
+                status: "active",
+                resume_at: null,
+                updated_at: new Date().toISOString()
+            }).eq("id", 1);
+            if (!error) loadBotControl();
+        });
+
+        document.getElementById("btn-pause-indefinite").addEventListener("click", async () => {
+            if (!confirm("¿Deseas pausar indefinidamente el bot? No operará hasta que lo enciendas de nuevo.")) return;
+            const { error } = await supabaseClient.from("bot_control").update({
+                status: "paused_indefinite",
+                resume_at: null,
+                updated_at: new Date().toISOString()
+            }).eq("id", 1);
+            if (!error) loadBotControl();
+        });
+
+        // Modal Pausa Temporal
+        const pauseModal = document.getElementById("pause-modal");
+        document.getElementById("btn-open-pause-modal").addEventListener("click", () => {
+            pauseModal.classList.remove("hidden");
+        });
+        document.getElementById("btn-cancel-pause").addEventListener("click", () => {
+            pauseModal.classList.add("hidden");
+        });
+
+        document.getElementById("pause-preset").addEventListener("change", (e) => {
+            const isCustom = e.target.value === "custom";
+            document.getElementById("custom-date-container").classList.toggle("hidden", !isCustom);
+        });
+
+        document.getElementById("btn-confirm-pause").addEventListener("click", async () => {
+            const preset = document.getElementById("pause-preset").value;
+            let resumeAt = null;
+
+            if (preset === "custom") {
+                const val = document.getElementById("pause-custom-datetime").value;
+                if (!val) { alert("Selecciona fecha y hora"); return; }
+                resumeAt = new Date(val).toISOString();
+            } else {
+                const hours = parseFloat(preset);
+                resumeAt = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+            }
+
+            const { error } = await supabaseClient.from("bot_control").update({
+                status: "paused_until",
+                resume_at: resumeAt,
+                updated_at: new Date().toISOString()
+            }).eq("id", 1);
+
+            pauseModal.classList.add("hidden");
+            if (!error) loadBotControl();
+        });
+
+        // Guardar Franjas Horarias
+        document.getElementById("form-windows").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const w1_s = document.getElementById("win-1-start").value;
+            const w1_e = document.getElementById("win-1-end").value;
+            const w2_s = document.getElementById("win-2-start").value;
+            const w2_e = document.getElementById("win-2-end").value;
+
+            const { error } = await supabaseClient.from("bot_control").update({
+                trading_window_1_start: w1_s,
+                trading_window_1_end: w1_e,
+                trading_window_2_start: w2_s,
+                trading_window_2_end: w2_e,
+                updated_at: new Date().toISOString()
+            }).eq("id", 1);
+
+            if (!error) {
+                alert("✅ Franjas horarias actualizadas con éxito.");
+                loadBotControl();
+            }
+        });
+
+        // Cargar sim_wallet
+        async function loadWalletStatus() {
+            const { data } = await supabaseClient.from("sim_wallet").select("*").eq("id", 1).single();
+            if (!data) return;
+
+            const total = parseFloat(data.cash_balance || 10.0);
+            document.getElementById("kpi-balance").innerText = `${total.toFixed(2)}€`;
+
+            const floorBadge = document.getElementById("kpi-floor-badge");
+            if (data.floor_activated) {
+                floorBadge.className = "mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-400 font-semibold";
+                floorBadge.innerText = "🛡️ Colchón: ACTIVO (6.00€ blindados)";
+            } else {
+                floorBadge.className = "mt-1 inline-flex items-center gap-1 text-[11px] text-slate-400";
+                floorBadge.innerText = "🛡️ Colchón: Inactivo (acumulando hacia 12€)";
+            }
+        }
+
+        // Cargar Trades, KPIs y Gráfica
+        async function loadTradesAndKPIs() {
+            const { data: trades, error } = await supabaseClient.from("sim_trades").select("*").order("exit_time", { ascending: true });
+            if (error || !trades) return;
+
+            const now = Date.now();
+            let pnl1h = 0, count1h = 0;
+            let pnl24h = 0, count24h = 0;
+            let pnl7d = 0, count7d = 0, wins7d = 0;
+
+            const chartLabels = [];
+            const chartData = [];
+            let cumulativePnl = 10.0; // Base inicial
+
+            trades.forEach(t => {
+                const exitMs = new Date(t.exit_time).getTime();
+                const netPnl = parseFloat(t.net_pnl_usdt || 0);
+
+                // 1h
+                if (now - exitMs <= 3600 * 1000) {
+                    pnl1h += netPnl;
+                    count1h++;
+                }
+                // 24h
+                if (now - exitMs <= 24 * 3600 * 1000) {
+                    pnl24h += netPnl;
+                    count24h++;
+                }
+                // 7d
+                if (now - exitMs <= 7 * 24 * 3600 * 1000) {
+                    pnl7d += netPnl;
+                    count7d++;
+                    if (netPnl > 0) wins7d++;
+                }
+
+                // Datos de gráfica
+                cumulativePnl += netPnl;
+                const dStr = new Date(t.exit_time).toLocaleDateString("es-ES", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                chartLabels.push(dStr);
+                chartData.push(cumulativePnl.toFixed(2));
+            });
+
+            // Actualizar tarjetas de KPI
+            renderKpi("kpi-1h-pnl", "kpi-1h-sub", pnl1h, `${count1h} ops`);
+            renderKpi("kpi-24h-pnl", "kpi-24h-sub", pnl24h, `${count24h} ops`);
+            const winRate7d = count7d > 0 ? ((wins7d / count7d) * 100).toFixed(1) : "0.0";
+            renderKpi("kpi-7d-pnl", "kpi-7d-sub", pnl7d, `Win rate: ${winRate7d}% (${count7d} ops)`);
+
+            // Actualizar Gráfica Chart.js
+            renderChart(chartLabels, chartData);
+
+            // Renderizar Tabla de Trades (más recientes primero)
+            renderTradesTable([...trades].reverse());
+        }
+
+        function renderKpi(pnlId, subId, val, subText) {
+            const el = document.getElementById(pnlId);
+            const sub = document.getElementById(subId);
+            const sign = val >= 0 ? "+" : "";
+            el.innerText = `${sign}${val.toFixed(2)}€`;
+            el.className = `text-2xl font-extrabold mt-2 ${val > 0 ? 'text-emerald-400' : val < 0 ? 'text-rose-400' : 'text-slate-200'}`;
+            sub.innerText = subText;
+        }
+
+        function renderChart(labels, dataPoints) {
+            const ctx = document.getElementById("chart-equity").getContext("2d");
+            if (equityChart) equityChart.destroy();
+
+            // Si no hay datos, mostrar punto inicial
+            const finalLabels = labels.length > 0 ? labels : ["Inicio"];
+            const finalData = dataPoints.length > 0 ? dataPoints : [10.0];
+
+            equityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: finalLabels,
+                    datasets: [{
+                        label: 'Balance Total (€)',
+                        data: finalData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.25,
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: finalData.length > 20 ? 0 : 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0f172a',
+                            titleColor: '#94a3b8',
+                            bodyColor: '#f1f5f9',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: (ctx) => `Balance: ${ctx.parsed.y}€`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                            ticks: { color: '#64748b', maxRotation: 0, font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                            ticks: {
+                                color: '#64748b',
+                                font: { size: 10 },
+                                callback: (v) => `${v}€`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderTradesTable(trades) {
+            const tbody = document.getElementById("trades-table-body");
+            const filterSym = document.getElementById("filter-symbol").value;
+
+            const filtered = filterSym === "ALL" ? trades : trades.filter(t => t.symbol === filterSym);
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-slate-500 font-sans">No hay operaciones registradas.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(t => {
+                const entryStr = new Date(t.entry_time).toLocaleString("es-ES", { timeZone: "Europe/Madrid", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                const exitStr = new Date(t.exit_time).toLocaleString("es-ES", { timeZone: "Europe/Madrid", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                const pnlEur = parseFloat(t.net_pnl_usdt || 0);
+                const pnlPct = parseFloat(t.net_pnl_pct || 0);
+                const sign = pnlEur >= 0 ? "+" : "";
+                const isGreen = pnlEur >= 0;
+
+                const reasons = Array.isArray(t.entry_reasons) ? t.entry_reasons.join(", ") : (t.entry_reasons || "");
+
+                return `
+                    <tr class="hover:bg-slate-800/40 transition-colors">
+                        <td class="p-3 font-bold text-white">${t.symbol}</td>
+                        <td class="p-3 text-slate-400">${entryStr}</td>
+                        <td class="p-3">$${parseFloat(t.entry_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td class="p-3 text-slate-400">${exitStr}</td>
+                        <td class="p-3">$${parseFloat(t.exit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                        <td class="p-3 text-slate-300">${parseFloat(t.position_size_usdt).toFixed(2)}€</td>
+                        <td class="p-3 text-slate-300">${(parseFloat(t.position_size_usdt) + pnlEur).toFixed(2)}€</td>
+                        <td class="p-3 text-right font-bold ${isGreen ? 'text-emerald-400' : 'text-rose-400'}">
+                            ${sign}${pnlEur.toFixed(2)}€ <span class="text-[10px] font-normal opacity-80">(${sign}${pnlPct.toFixed(2)}%)</span>
+                        </td>
+                        <td class="p-3 text-[10px] text-slate-400 max-w-xs truncate" title="${reasons}">${reasons || '—'}</td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        document.getElementById("filter-symbol").addEventListener("change", () => {
+            loadTradesAndKPIs();
+        });
+
+        // Cargar sim_daily_snapshots
+        async function loadDailySnapshots() {
+            const { data: snapshots, error } = await supabaseClient.from("sim_daily_snapshots").select("*").order("date", { ascending: false });
+            const tbody = document.getElementById("snapshots-table-body");
+            if (error || !snapshots || snapshots.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500 font-sans">No hay informes diarios registrados.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = snapshots.map(s => {
+                const pnlEur = parseFloat(s.net_pnl_usdt || 0);
+                const pnlPct = parseFloat(s.net_pnl_pct || 0);
+                const sign = pnlEur >= 0 ? "+" : "";
+                const isGreen = pnlEur >= 0;
+
+                return `
+                    <tr class="hover:bg-slate-800/40 transition-colors">
+                        <td class="p-3 font-bold text-white">${s.date}</td>
+                        <td class="p-3 text-slate-200">${parseFloat(s.closing_balance).toFixed(2)}€</td>
+                        <td class="p-3 font-semibold ${isGreen ? 'text-emerald-400' : 'text-rose-400'}">${sign}${pnlEur.toFixed(2)}€</td>
+                        <td class="p-3 ${isGreen ? 'text-emerald-400' : 'text-rose-400'}">${sign}${pnlPct.toFixed(2)}%</td>
+                        <td class="p-3 text-slate-400">${s.trades_count}</td>
+                        <td class="p-3 text-slate-300 font-bold">${parseFloat(s.win_rate_pct).toFixed(1)}%</td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        // 8. Auto-recarga periódica cada 30 segundos
+        document.getElementById("btn-refresh").addEventListener("click", loadAllData);
+        setInterval(() => {
+            if (supabaseClient) loadAllData();
+        }, 30000);
+
+        // Arranque inicial
+        startMadridClock();
+        initSupabase();
+        checkSession();
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-﻿-- ====================================================================
+-- ====================================================================
 -- TradIA - Esquema de Base de Datos para Supabase (PostgreSQL)
 -- Copia y pega este contenido en el SQL Editor de tu proyecto Supabase.
 -- ====================================================================
@@ -84,13 +84,56 @@ CREATE TABLE IF NOT EXISTS user_confirmed_positions (
     closed_at TIMESTAMPTZ
 );
 
--- Desactivar RLS o permitir acceso para que funcione con claves anon y service_role
-ALTER TABLE sim_wallet DISABLE ROW LEVEL SECURITY;
-ALTER TABLE sim_positions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE sim_trades DISABLE ROW LEVEL SECURITY;
-ALTER TABLE sim_daily_snapshots DISABLE ROW LEVEL SECURITY;
-ALTER TABLE signals DISABLE ROW LEVEL SECURITY;
-ALTER TABLE user_confirmed_positions DISABLE ROW LEVEL SECURITY;
+-- 7. Control de Estado Operativo y Franjas de Trading Remotas (Dashboard)
+CREATE TABLE IF NOT EXISTS bot_control (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused_until', 'paused_indefinite')),
+    resume_at TIMESTAMPTZ,
+    trading_window_1_start TEXT NOT NULL DEFAULT '08:30',
+    trading_window_1_end TEXT NOT NULL DEFAULT '17:30',
+    trading_window_2_start TEXT NOT NULL DEFAULT '20:30',
+    trading_window_2_end TEXT NOT NULL DEFAULT '23:00',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ====================================================================
+-- SEGURIDAD: Row Level Security (RLS) & Supabase Auth
+-- Solo usuarios autenticados mediante Supabase Auth pueden leer/escribir.
+-- La clave 'service_role' (GitHub Actions) omite RLS automáticamente.
+-- ====================================================================
+ALTER TABLE bot_control ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sim_wallet ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sim_positions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sim_trades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sim_daily_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE signals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_confirmed_positions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated users full access bot_control" ON bot_control;
+CREATE POLICY "Authenticated users full access bot_control" ON bot_control FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users full access sim_wallet" ON sim_wallet;
+CREATE POLICY "Authenticated users full access sim_wallet" ON sim_wallet FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users full access sim_positions" ON sim_positions;
+CREATE POLICY "Authenticated users full access sim_positions" ON sim_positions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users full access sim_trades" ON sim_trades;
+CREATE POLICY "Authenticated users full access sim_trades" ON sim_trades FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users full access sim_daily_snapshots" ON sim_daily_snapshots;
+CREATE POLICY "Authenticated users full access sim_daily_snapshots" ON sim_daily_snapshots FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users full access signals" ON signals;
+CREATE POLICY "Authenticated users full access signals" ON signals FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated users full access user_confirmed_positions" ON user_confirmed_positions;
+CREATE POLICY "Authenticated users full access user_confirmed_positions" ON user_confirmed_positions FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Inicializar bot_control con estado activo y franjas por defecto si está vacío
+INSERT INTO bot_control (id, status, resume_at, trading_window_1_start, trading_window_1_end, trading_window_2_start, trading_window_2_end, updated_at)
+VALUES (1, 'active', NULL, '08:30', '17:30', '20:30', '23:00', NOW())
+ON CONFLICT (id) DO NOTHING;
 
 -- Inicializar wallet en 10.0€ si está vacío
 INSERT INTO sim_wallet (id, cash_balance, initial_balance, floor_activated, is_halted, halt_reason, start_date, updated_at)

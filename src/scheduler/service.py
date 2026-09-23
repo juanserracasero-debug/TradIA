@@ -11,6 +11,7 @@ Combina:
 - Informe diario a las 23:00 (resumen + archivo HTML adjunto).
 """
 import logging
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -244,13 +245,100 @@ class LiveTradingService:
             )
             self.notifier.send_alert(body, subject=f"🔴 VENDE TODO {sym} (Cierre 22:45)")
 
+    def send_heartbeat(
+        self,
+        signals: Optional[List[SignalEvent]] = None,
+        current_time: Optional[datetime] = None,
+    ) -> bool:
+        """Envía un email corto de confirmación (heartbeat) tras finalizar el ciclo de 15m."""
+        if not getattr(self.config.notifications, "heartbeat_emails", True):
+            logger.debug("Heartbeat desactivado en configuración.")
+            return False
+
+        madrid_now = self.time_manager.to_madrid(current_time)
+        hora_str = madrid_now.strftime("%H:%M")
+        portfolio = self.wallet.get_portfolio_status()
+        total_balance = portfolio.get("total_equity", portfolio.get("cash_balance", 0.0))
+
+        if self.time_manager.is_forced_close_time(madrid_now):
+            status_text = "Cierre forzado 22:45 ejecutado"
+        elif self.time_manager.is_daily_report_time(madrid_now):
+            status_text = "Reporte diario 23:00 emitido"
+        elif not self.time_manager.is_trading_hour(madrid_now):
+            status_text = "Fuera de horario, en reposo"
+        else:
+            if signals and len(signals) > 0:
+                syms = ", ".join(f"{s.symbol} {s.action.value}" for s in signals)
+                status_text = f"Señales procesadas ({syms})"
+            else:
+                status_text = "Sin señales"
+
+        headline = f"✅ TradIA — Ciclo OK [{hora_str}]. {status_text}. Balance: {total_balance:.2f}€"
+        db_mode = "SUPABASE (Nube)" if getattr(self.db, "is_supabase", False) else "SQLITE (Local)"
+        floor_desc = "ACTIVO (6.00€ protegidos)" if portfolio.get("floor_activated") else "INACTIVO (acumulando hacia 12.00€)"
+
+        body = (
+            f"{headline}\n\n"
+            f"📋 Resumen de estado del ciclo:\n"
+            f"• Hora Madrid:         {madrid_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            f"• Estado de mercado:   {'EN REPOSO' if not self.time_manager.is_trading_hour(madrid_now) else 'OPERATIVO'}\n"
+            f"• Base de datos:       {db_mode}\n"
+            f"• Balance Total:       {total_balance:.2f}€\n"
+            f"• Efectivo disponible: {portfolio.get('cash_balance', 0.0):.2f}€\n"
+            f"• Posiciones abiertas: {portfolio.get('open_positions_count', 0)}\n"
+            f"• Colchón dinámico:    {floor_desc}\n\n"
+            f"⏱️ Próximo ciclo programado en 15 minutos."
+        )
+
+        try:
+            sent = self.notifier.send_alert(body, subject=headline)
+            logger.info(f"Heartbeat enviado: {headline}")
+            return sent
+        except Exception as e:
+            logger.warning(f"No se pudo enviar el heartbeat: {e}")
+            return False
+
+    def send_error_alert(
+        self,
+        exc: Exception,
+        current_time: Optional[datetime] = None,
+    ) -> bool:
+        """Envía una alerta de error por email en caso de fallo crítico en el ciclo."""
+        madrid_now = self.time_manager.to_madrid(current_time)
+        hora_str = madrid_now.strftime("%H:%M")
+        headline = f"❌ TradIA — Error en ciclo [{hora_str}]"
+
+        body = (
+            f"❌ ALERTA CRÍTICA TRADIA — Error en ciclo [{hora_str}]\n\n"
+            f"Se ha producido una excepción no controlada durante la ejecución:\n"
+            f"• Tipo de error: {type(exc).__name__}\n"
+            f"• Detalle:       {str(exc)}\n"
+            f"• Hora Madrid:   {madrid_now.strftime('%Y-%m-%d %H:%M:%S %Z')}\n\n"
+            f"Traza detallada:\n"
+            f"{traceback.format_exc()}\n\n"
+            f"⚠️ Revisa los logs de GitHub Actions o la consola local."
+        )
+
+        try:
+            sent = self.notifier.send_alert(body, subject=headline)
+            logger.info(f"Alerta de error enviada: {headline}")
+            return sent
+        except Exception as e:
+            logger.error(f"Error adicional enviando alerta de fallo: {e}")
+            return False
+
     def start_scheduler(self) -> None:
         """Inicia el planificador con APScheduler respetando Europe/Madrid."""
         tz_str = self.config.schedule.timezone
         self.scheduler = BackgroundScheduler(timezone=tz_str)
 
+        def _scheduled_cycle():
+            sigs = self.run_analysis_cycle()
+            if getattr(self.config.notifications, "heartbeat_emails", True):
+                self.send_heartbeat(signals=sigs)
+
         self.scheduler.add_job(
-            func=self.run_analysis_cycle,
+            func=_scheduled_cycle,
             trigger=CronTrigger(minute="0,15,30,45", second="5", timezone=tz_str),
             id="candle_analysis_cycle",
             name="Análisis OHLCV cada 15m",

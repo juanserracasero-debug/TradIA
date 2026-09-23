@@ -3,12 +3,17 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
-from src.config import AppConfig, NotificationsConfig
+from src.config import AppConfig, NotificationsConfig, load_config
 from src.database.db import DatabaseManager
 from src.notifications import EmailNotifier, WhatsAppNotifier, get_notifier
 from src.notifications.base import Notifier
+from src.scheduler.service import LiveTradingService
+from src.scheduler.time_manager import MadridTimeManager
+from src.strategy.rules import SignalAction, SignalEvent
 
 
 class TestNotifiers(unittest.TestCase):
@@ -121,6 +126,107 @@ class TestUserPositionRegistration(unittest.TestCase):
 
         open_pos_after = self.db.get_open_user_positions()
         self.assertEqual(len(open_pos_after), 0)
+
+
+class TestHeartbeatAndErrorAlerts(unittest.TestCase):
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, "test_heartbeat.db")
+        self.db = DatabaseManager(db_path=self.db_path)
+        self.config = load_config()
+        self.config.schedule.extended_hours_until = None
+        self.notifier = MagicMock(spec=Notifier)
+        self.service = LiveTradingService(
+            config=self.config,
+            db_manager=self.db,
+            notifier=self.notifier,
+        )
+        self.madrid_tz = ZoneInfo("Europe/Madrid")
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_heartbeat_outside_trading_hours(self):
+        """Debe enviar confirmación con 'Fuera de horario, en reposo' en horario normal de reposo."""
+        night_time = datetime(2026, 9, 25, 3, 15, 0, tzinfo=self.madrid_tz)
+        res = self.service.send_heartbeat(signals=[], current_time=night_time)
+        self.notifier.send_alert.assert_called_once()
+        alert_args = self.notifier.send_alert.call_args[0]
+        body = alert_args[0]
+        subject = self.notifier.send_alert.call_args[1]["subject"]
+        self.assertIn("Ciclo OK [03:15]", subject)
+        self.assertIn("Fuera de horario, en reposo", subject)
+        self.assertIn("Balance: 10.00€", subject)
+        self.assertIn("EN REPOSO", body)
+
+    def test_heartbeat_during_extended_hours_overnight(self):
+        """Durante la excepción de horario extendido, la madrugada se reporta como activo sin señales."""
+        self.service.config.schedule.extended_hours_until = "2026-09-24T08:30:00+02:00"
+        self.service.time_manager = MadridTimeManager(self.service.config.schedule)
+        night_time = datetime(2026, 9, 24, 3, 15, 0, tzinfo=self.madrid_tz)
+        self.service.send_heartbeat(signals=[], current_time=night_time)
+        self.notifier.send_alert.assert_called_once()
+        subject = self.notifier.send_alert.call_args[1]["subject"]
+        self.assertIn("Ciclo OK [03:15]", subject)
+        self.assertIn("Sin señales", subject)
+        self.assertIn("Balance: 10.00€", subject)
+
+    def test_heartbeat_inside_trading_hours_no_signals(self):
+        """En horario activo sin señales debe reportar 'Sin señales'."""
+        trade_time = datetime(2026, 9, 23, 11, 30, 0, tzinfo=self.madrid_tz)
+        self.service.send_heartbeat(signals=[], current_time=trade_time)
+        self.notifier.send_alert.assert_called_once()
+        subject = self.notifier.send_alert.call_args[1]["subject"]
+        self.assertIn("Ciclo OK [11:30]", subject)
+        self.assertIn("Sin señales", subject)
+        self.assertIn("Balance: 10.00€", subject)
+
+    def test_heartbeat_inside_trading_hours_with_signals(self):
+        """En horario activo con señales debe detallar las señales encontradas."""
+        trade_time = datetime(2026, 9, 23, 11, 45, 0, tzinfo=self.madrid_tz)
+        mock_signal = SignalEvent(
+            symbol="BTC/USDT",
+            action=SignalAction.BUY,
+            price=85000.0,
+            score=4,
+            reasons=["RSI sobreventa"],
+            metrics={},
+            timestamp=trade_time,
+        )
+        self.service.send_heartbeat(signals=[mock_signal], current_time=trade_time)
+        self.notifier.send_alert.assert_called_once()
+        subject = self.notifier.send_alert.call_args[1]["subject"]
+        self.assertIn("Ciclo OK [11:45]", subject)
+        self.assertIn("Señales procesadas", subject)
+        self.assertIn("BTC/USDT BUY", subject)
+
+    def test_heartbeat_disabled_flag(self):
+        """Si heartbeat_emails está desactivado, no debe enviar email."""
+        self.service.config.notifications.heartbeat_emails = False
+        trade_time = datetime(2026, 9, 23, 12, 0, 0, tzinfo=self.madrid_tz)
+        res = self.service.send_heartbeat(signals=[], current_time=trade_time)
+        self.assertFalse(res)
+        self.notifier.send_alert.assert_not_called()
+
+    def test_send_error_alert(self):
+        """send_error_alert envía un email de alerta crítica con detalles."""
+        trade_time = datetime(2026, 9, 23, 14, 15, 0, tzinfo=self.madrid_tz)
+        test_exc = ConnectionResetError("Conexión con exchange reseteada por el peer")
+        self.service.send_error_alert(exc=test_exc, current_time=trade_time)
+        self.notifier.send_alert.assert_called_once()
+        alert_args = self.notifier.send_alert.call_args
+        subject = alert_args[1]["subject"]
+        body = alert_args[0][0]
+        self.assertIn("❌ TradIA — Error en ciclo [14:15]", subject)
+        self.assertIn("ConnectionResetError", body)
+        self.assertIn("Conexión con exchange reseteada", body)
+
+    @patch.dict(os.environ, {"HEARTBEAT_EMAILS": "false"})
+    def test_load_config_heartbeat_env_override(self):
+        """Variable de entorno HEARTBEAT_EMAILS=false sobrescribe el YAML."""
+        cfg = load_config()
+        self.assertFalse(cfg.notifications.heartbeat_emails)
 
 
 if __name__ == "__main__":
