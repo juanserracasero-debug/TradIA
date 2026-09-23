@@ -1,0 +1,2 @@
+symbol,entry_time,entry_price,exit_time,exit_price,position_size_eur,total_fees_eur,net_pnl_eur,net_pnl_pct,exit_reasons
+BTC/USDT,2026-09-22T08:30:00+00:00,86192.73483,2026-09-22T20:30:00+00:00,86278.839,9.635086199742867,0.01927979758543376,-1.9525437668477252e-05,-0.00020264933041282322,"['Tipo de salida: FIN_SIMULACION_14D', 'Cierre forzado 22:45 para evitar exposición nocturna']"

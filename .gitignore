@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# TradIA Data and Cache
+data_cache/
+*.db
+*.sqlite3
+
+# Environment and sensitive keys
+.env
+
+# Logs and IDE
+*.log
+.vscode/
+.idea/

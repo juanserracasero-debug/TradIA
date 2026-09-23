@@ -1,0 +1,74 @@
+# ==========================================
+# TradIA - Configuración Central
+# ==========================================
+
+notifications:
+  channel: "email"           # "email" (Mailjet/SMTP) o "whatsapp" (Twilio/Meta)
+
+market:
+  exchange: binance          # Solo endpoints públicos (sin API keys de trading)
+  symbols:
+    - BTC/USDT
+    - ETH/USDT
+  timeframe: 15m             # Timeframe base para análisis de day-trading
+
+schedule:
+  timezone: "Europe/Madrid"  # Respeto estricto del cambio de hora (CEST/CET)
+  windows:
+    morning:
+      start: "08:30"
+      end: "17:30"
+    evening:
+      start: "20:30"
+      end: "23:00"
+  force_close_time: "22:45"  # Cierre obligatorio de posiciones intradía sin pernocta
+  daily_report_time: "23:00" # Emisión del reporte diario de resultados
+
+indicators:
+  rsi:
+    period: 14
+    oversold: 30             # Umbral de sobreventa
+    overbought: 70           # Umbral de sobrecompra
+  ema:
+    fast_period: 9
+    slow_period: 21
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+  bollinger:
+    period: 20
+    std_dev: 2.0
+  volume:
+    sma_period: 20
+    multiplier_threshold: 1.5 # Volumen >= 1.5x de su media móvil de 20 períodos
+
+strategy:
+  mode: scoring
+  min_score_buy: 3
+  min_score_sell: 3
+  weights:
+    rsi: 2
+    ema_cross: 2
+    macd_cross: 1
+    bollinger: 1
+    volume_surge: 1
+
+simulation:
+  enabled: true                        # Modo Paper Trading con dinero ficticio
+  initial_balance_usdt: 10.0           # Balance inicial ficticio (10.0€ / USDT)
+  position_size_pct: 100.0             # 100% del capital operable (máx. 1 posición abierta global)
+  reserve_floor_eur: 6.0               # Colchón protegido cuando esté activo
+  min_order_size_eur: 6.0              # Tamaño mínimo de orden de exchange
+  floor_activation_threshold_eur: 12.0 # Se activa el colchón al alcanzar >= 12.0€
+  fee_pct: 0.1                         # 0.1% comisión simulada por compra/venta
+  slippage_pct: 0.05                   # 0.05% deslizamiento simulado por latencia humana
+  duration_days: 14                    # Duración del experimento para reporte final
+
+backtest:
+  take_profit_pct: 1.5
+  stop_loss_pct: 0.75
+  max_holding_bars: 32
+  slippage_pct: 0.05
+  fee_pct: 0.075
+  default_days: 30

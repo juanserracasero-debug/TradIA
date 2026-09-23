@@ -1,0 +1,2 @@
+symbol,entry_time,entry_price,exit_time,exit_price,position_size_eur,total_fees_eur,net_pnl_eur,net_pnl_pct,exit_reasons
+ETH/USDT,2026-09-16T06:45:00+00:00,2407.973385,2026-09-16T07:15:00+00:00,2398.190305,9.629906091125019,0.019220687936829045,-0.048715027266696964,-0.5058722982936774,"['Tipo de salida: SEÑAL_VENTA', 'Cruce bajista EMA9 bajo EMA21', 'Cruce bajista MACD bajo señal']"

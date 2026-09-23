@@ -1,0 +1,2 @@
+symbol,entry_time,entry_price,exit_time,exit_price,position_size_eur,total_fees_eur,net_pnl_eur,net_pnl_pct,exit_reasons
+BTC/USDT,2026-09-11T12:30:00+00:00,77628.80500499999,2026-09-11T12:45:00+00:00,77993.97350500002,9.814427736806449,0.0196750228705576,0.036306801810946254,0.36993294753994743,"['Tipo de salida: SEÑAL_VENTA', 'RSI en 73.3 (sobrecompra > 70.0)', 'Precio en techo banda superior Bollinger (%B: 1.27)', 'Volumen anómalo +220% sobre su media']"

@@ -1,0 +1,53 @@
+﻿name: TradIA Live Engine
+
+on:
+  schedule:
+    # Ejecuta cada 15 minutos en punto (00, 15, 30, 45 de cada hora UTC)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Permite ejecución manual desde la pestaña Actions de GitHub
+
+concurrency:
+  group: tradia-live-execution
+  cancel-in-progress: false
+
+jobs:
+  run-cycle:
+    name: Ejecutar Ciclo TradIA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar ciclo de análisis y simulación
+        env:
+          # Base de datos en la nube (Supabase)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+          # Notificaciones por Email (Mailjet SMTP)
+          MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+          MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
+          MAILJET_SENDER: ${{ secrets.MAILJET_SENDER }}
+          MAILJET_TO: ${{ secrets.MAILJET_TO }}
+
+          # Servidor SMTP y zona horaria
+          SMTP_HOST: in-v3.mailjet.com
+          SMTP_PORT: "587"
+          TIMEZONE: Europe/Madrid
+          SIMULATION_MODE: "true"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python scripts/run_live.py

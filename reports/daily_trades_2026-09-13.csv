@@ -1,0 +1,2 @@
+symbol,entry_time,entry_price,exit_time,exit_price,position_size_eur,total_fees_eur,net_pnl_eur,net_pnl_pct,exit_reasons
+ETH/USDT,2026-09-13T06:45:00+00:00,2514.446595,2026-09-13T20:45:00+00:00,2511.593575,9.818759005474426,0.0196263771436608,-0.02094848542624206,-0.21335166098447145,"['Tipo de salida: CIERRE_FORZADO_2245', 'Cierre forzado 22:45 para evitar exposición nocturna']"

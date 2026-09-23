@@ -1,0 +1,2 @@
+symbol,entry_time,entry_price,exit_time,exit_price,position_size_eur,total_fees_eur,net_pnl_eur,net_pnl_pct,exit_reasons
+ETH/USDT,2026-09-21T08:15:00+00:00,2682.5205899999996,2026-09-21T09:15:00+00:00,2716.071285,9.535118477513807,0.01918949413911802,0.10960280842880188,1.1494645681359146,"['Tipo de salida: SEÑAL_VENTA', 'RSI en 71.4 (sobrecompra > 70.0)', 'Precio en techo banda superior Bollinger (%B: 1.16)', 'Volumen anómalo +186% sobre su media']"

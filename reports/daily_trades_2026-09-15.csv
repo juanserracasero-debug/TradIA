@@ -1,0 +1,3 @@
+symbol,entry_time,entry_price,exit_time,exit_price,position_size_eur,total_fees_eur,net_pnl_eur,net_pnl_pct,exit_reasons
+BTC/USDT,2026-09-15T07:00:00+00:00,77256.609,2026-09-15T18:30:00+00:00,75735.13349000001,9.788022497550635,0.01938328172585977,-0.20235852846980862,-2.067409719587864,"['Tipo de salida: SEÑAL_VENTA', 'Cruce bajista EMA9 bajo EMA21', 'Volumen anómalo +178% sobre su media']"
+ETH/USDT,2026-09-15T18:30:00+00:00,2388.5236649999997,2026-09-15T20:45:00+00:00,2406.7560200000003,9.576087881199628,0.01922527306359817,0.06344811601651479,0.6625682304052376,"['Tipo de salida: CIERRE_FORZADO_2245', 'Cierre forzado 22:45 para evitar exposición nocturna']"
